@@ -1,17 +1,14 @@
-﻿using Microsoft.Extensions.Options;
-using Telegram.Bot;
+﻿using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using TelegramBusinessBot.Configuration;
 using TelegramBusinessBot.Handlers;
 
 namespace TelegramBusinessBot.BackgroundServices
 {
     public class BotRunnerService(
-     ITelegramBotClient bot,
-     IOptions<BotConfig> options,
-     IServiceScopeFactory scopes,
-     ILogger<BotRunnerService> log)
-     : BackgroundService
+    ITelegramBotClient bot,
+    IServiceScopeFactory scopes,
+    ILogger<BotRunnerService> log)
+    : BackgroundService
     {
         private static readonly UpdateType[] Allowed =
         [
@@ -24,31 +21,6 @@ namespace TelegramBusinessBot.BackgroundServices
 
         protected override async Task ExecuteAsync(CancellationToken ct)
         {
-            var config = options.Value;
-
-            var useWebhook =
-                config.PublicUrl.StartsWith(
-                    "https://",
-                    StringComparison.OrdinalIgnoreCase);
-
-            if (useWebhook)
-            {
-                var url = config.PublicUrl.TrimEnd('/') + "/webhook";
-
-                await bot.SetWebhook(
-                    url,
-                    allowedUpdates: Allowed,
-                    secretToken: config.SecretToken,
-                    dropPendingUpdates: false,
-                    cancellationToken: ct);
-
-                log.LogInformation(
-                    "Webhook registered: {Url}",
-                    url);
-
-                return;
-            }
-
             await bot.DeleteWebhook(
                 dropPendingUpdates: false,
                 cancellationToken: ct);
@@ -87,8 +59,6 @@ namespace TelegramBusinessBot.BackgroundServices
                                 "Error processing update {UpdateId}",
                                 update.Id);
 
-                            // Не увеличиваем offset при ошибке.
-                            // Telegram сможет вернуть это обновление повторно.
                             break;
                         }
                     }
