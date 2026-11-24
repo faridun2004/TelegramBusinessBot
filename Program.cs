@@ -1,36 +1,16 @@
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using TelegramBusinessBot.BackgroundServices;
 using TelegramBusinessBot.Configuration;
 using TelegramBusinessBot.Extensions;
 using TelegramBusinessBot.Handlers;
-using TelegramBusinessBot.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<BotConfig>(
-    builder.Configuration.GetSection("Bot"));
-
-var cfg = builder.Configuration.GetSection("Bot").Get<BotConfig>()
-          ?? throw new InvalidOperationException(
-              "Section 'Bot' is missing");
-
-// Telegram
-builder.Services.AddSingleton<ITelegramBotClient>(
-    _ => new TelegramBotClient(cfg.Token));
-
-// Application services
-builder.Services.AddSingleton<BusinessConnectionStore>();
-builder.Services.AddSingleton<ReplyEngine>();
-
-
 builder.Services.AddTelegramBusinessBot(builder.Configuration);
+
 // Update processing
 builder.Services.AddScoped<UpdateHandler>();
-
-// Background service
-builder.Services.AddHostedService<BotRunnerService>();
 
 var app = builder.Build();
 
@@ -75,13 +55,9 @@ app.MapPost("/webhook", async (
     }
     catch (Exception ex)
     {
-        log.LogError(
-            ex,
-            "Error while handling update {UpdateId}",
-            update.Id);
+        log.LogError(ex, "Error handling update {UpdateId}", update.Id);
 
-        return Results.StatusCode(
-            StatusCodes.Status500InternalServerError);
+        return Results.StatusCode(500);
     }
 });
 

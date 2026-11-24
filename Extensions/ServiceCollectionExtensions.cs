@@ -1,7 +1,6 @@
 ﻿using Telegram.Bot;
 using TelegramBusinessBot.BackgroundServices;
 using TelegramBusinessBot.Configuration;
-using TelegramBusinessBot.Handlers;
 using TelegramBusinessBot.Services;
 using TelegramBusinessBot.Services.Interfaces;
 
@@ -40,8 +39,6 @@ namespace TelegramBusinessBot.Extensions
             services.AddSingleton<
                 IReplyEngine,
                 ReplyEngine>();
-
-            services.AddSingleton<UpdateHandler>();
 
             services.AddHostedService<BotRunnerService>();
 
