@@ -7,9 +7,18 @@ using TelegramBusinessBot.Services.Interfaces;
 namespace TelegramBusinessBot.Services
 {
     public class KeywordMatcher(
-    IOptions<BotConfig> options) : IKeywordMatcher
+        IOptions<BotConfig> options) : IKeywordMatcher
     {
         private readonly BotConfig _config = options.Value;
+
+        private readonly Dictionary<string, int> _priorities =
+            options.Value.Priorities
+                .Select((name, index) => new { name, index })
+                .DistinctBy(x => x.name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    x => x.name,
+                    x => x.index,
+                    StringComparer.OrdinalIgnoreCase);
 
         public KeywordMatch? Match(string text)
         {
@@ -17,17 +26,6 @@ namespace TelegramBusinessBot.Services
                 return null;
 
             var normalizedText = Normalize(text);
-
-            var priorities = _config.Priorities
-                .Select((name, index) => new
-                {
-                    Name = name,
-                    Priority = index
-                })
-                .ToDictionary(
-                    x => x.Name,
-                    x => x.Priority,
-                    StringComparer.OrdinalIgnoreCase);
 
             var matches = new List<KeywordMatch>();
 
@@ -46,7 +44,7 @@ namespace TelegramBusinessBot.Services
                     if (!IsMatch(normalizedText, normalizedTrigger))
                         continue;
 
-                    var priority = priorities.TryGetValue(
+                    var priority = _priorities.TryGetValue(
                         categoryName,
                         out var value)
                         ? value
@@ -74,11 +72,11 @@ namespace TelegramBusinessBot.Services
                 var pattern =
                     $@"(?<![\p{{L}}\p{{N}}_]){Regex.Escape(trigger)}(?![\p{{L}}\p{{N}}_])";
 
-                var options = _config.Settings.CaseInsensitive
+                var regexOptions = _config.Settings.CaseInsensitive
                     ? RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
                     : RegexOptions.None;
 
-                return Regex.IsMatch(text, pattern, options);
+                return Regex.IsMatch(text, pattern, regexOptions);
             }
 
             return text.Contains(
