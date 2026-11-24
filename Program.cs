@@ -1,19 +1,35 @@
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using TelegramBusinessBot;
+using TelegramBusinessBot.BackgroundServices;
+using TelegramBusinessBot.Configuration;
+using TelegramBusinessBot.Extensions;
+using TelegramBusinessBot.Handlers;
+using TelegramBusinessBot.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<BotConfig>(builder.Configuration.GetSection("Bot"));
+builder.Services.Configure<BotConfig>(
+    builder.Configuration.GetSection("Bot"));
 
 var cfg = builder.Configuration.GetSection("Bot").Get<BotConfig>()
-          ?? throw new InvalidOperationException("Section 'Bot' is missing");
+          ?? throw new InvalidOperationException(
+              "Section 'Bot' is missing");
 
-builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(cfg.Token));
+// Telegram
+builder.Services.AddSingleton<ITelegramBotClient>(
+    _ => new TelegramBotClient(cfg.Token));
+
+// Application services
 builder.Services.AddSingleton<BusinessConnectionStore>();
 builder.Services.AddSingleton<ReplyEngine>();
+
+
+builder.Services.AddTelegramBusinessBot(builder.Configuration);
+// Update processing
 builder.Services.AddScoped<UpdateHandler>();
+
+// Background service
 builder.Services.AddHostedService<BotRunnerService>();
 
 var app = builder.Build();
@@ -26,24 +42,47 @@ app.MapPost("/webhook", async (
     IOptions<BotConfig> opt,
     ILogger<Program> log) =>
 {
-    // Проверяем, что запрос действительно от Telegram
-    var secret = ctx.Request.Headers["X-Telegram-Bot-Api-Secret-Token"].ToString();
-    if (secret != opt.Value.SecretToken)
-        return Results.Unauthorized();
+    var expectedSecret = opt.Value.SecretToken;
 
-    var update = await ctx.Request.ReadFromJsonAsync<Update>(JsonBotAPI.Options, ctx.RequestAborted);
-    if (update is null) return Results.BadRequest();
+    var receivedSecret = ctx.Request.Headers[
+        "X-Telegram-Bot-Api-Secret-Token"].ToString();
+
+    if (string.IsNullOrWhiteSpace(expectedSecret) ||
+        !string.Equals(
+            receivedSecret,
+            expectedSecret,
+            StringComparison.Ordinal))
+    {
+        return Results.Unauthorized();
+    }
+
+    var update = await ctx.Request.ReadFromJsonAsync<Update>(
+        JsonBotAPI.Options,
+        ctx.RequestAborted);
+
+    if (update is null)
+        return Results.BadRequest();
 
     try
     {
         await handler.HandleAsync(update, ctx.RequestAborted);
+        return Results.Ok();
+    }
+    catch (OperationCanceledException)
+        when (ctx.RequestAborted.IsCancellationRequested)
+    {
+        throw;
     }
     catch (Exception ex)
     {
-        log.LogError(ex, "Error while handling update {Id}", update.Id);
-    }
+        log.LogError(
+            ex,
+            "Error while handling update {UpdateId}",
+            update.Id);
 
-    return Results.Ok(); // всегда 200, чтобы Telegram не повторял апдейт
+        return Results.StatusCode(
+            StatusCodes.Status500InternalServerError);
+    }
 });
 
 app.Run();
